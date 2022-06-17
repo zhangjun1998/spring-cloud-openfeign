@@ -57,6 +57,9 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
+ * {@link FeignClient}注解 修饰接口的代理工厂，使用该工厂生成 {@link FeignClient}注解所修饰接口的代理对象
+ * <p>
+ *
  * @author Spencer Gibb
  * @author Venil Noronha
  * @author Eko Kurniawan Khannedy

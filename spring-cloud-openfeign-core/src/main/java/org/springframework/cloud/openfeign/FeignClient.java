@@ -42,6 +42,10 @@ import org.springframework.core.annotation.AliasFor;
 public @interface FeignClient {
 
 	/**
+	 * 指定要调用的服务实例(name/value)
+	 * 可以注入属性配置
+	 * <p>
+	 *
 	 * The name of the service with optional protocol prefix. Synonym for {@link #name()
 	 * name}. A name must be specified for all clients, whether or not a url is provided.
 	 * Can be specified as property key, eg: ${propertyKey}.
@@ -51,6 +55,9 @@ public @interface FeignClient {
 	String value() default "";
 
 	/**
+	 * 用在 name/value 重复时作为标记
+	 * <p>
+	 *
 	 * This will be used as the bean name instead of name if present, but will not be used
 	 * as a service id.
 	 * @return bean name instead of name if present
@@ -89,16 +96,26 @@ public @interface FeignClient {
 	String[] qualifiers() default {};
 
 	/**
+	 * 用于指定访问地址，注意这种硬编码方式没法做负载均衡
+	 * <p>
+	 *
 	 * @return an absolute URL or resolvable hostname (the protocol is optional).
 	 */
 	String url() default "";
 
 	/**
+	 * 在 HTTP 调用出现404时候的操作，false 会直接抛异常，true 则返回 null
+	 * <p>
+	 *
 	 * @return whether 404s should be decoded instead of throwing FeignExceptions
 	 */
 	boolean decode404() default false;
 
 	/**
+	 * 对 FeignClient 的自定义配置。
+	 * 会覆盖掉 {@link EnableFeignClients} 中指定的 defaultConfiguration 属性
+	 * <p>
+	 *
 	 * A custom configuration class for the feign client. Can contain override
 	 * <code>@Bean</code> definition for the pieces that make up the client, for instance
 	 * {@link feign.codec.Decoder}, {@link feign.codec.Encoder}, {@link feign.Contract}.
@@ -109,6 +126,9 @@ public @interface FeignClient {
 	Class<?>[] configuration() default {};
 
 	/**
+	 * 指定降级逻辑
+	 * <p>
+	 *
 	 * Fallback class for the specified Feign client interface. The fallback class must
 	 * implement the interface annotated by this annotation and be a valid spring bean.
 	 * @return fallback class for the specified Feign client interface
@@ -116,6 +136,8 @@ public @interface FeignClient {
 	Class<?> fallback() default void.class;
 
 	/**
+	 * 指定降级逻辑工厂
+	 *
 	 * Define a fallback factory for the specified Feign client interface. The fallback
 	 * factory must produce instances of fallback classes that implement the interface
 	 * annotated by {@link FeignClient}. The fallback factory must be a valid spring bean.
@@ -126,6 +148,9 @@ public @interface FeignClient {
 	Class<?> fallbackFactory() default void.class;
 
 	/**
+	 * 指定访问路径前缀
+	 * <p>
+	 *
 	 * @return path prefix to be used by all method-level mappings.
 	 */
 	String path() default "";
