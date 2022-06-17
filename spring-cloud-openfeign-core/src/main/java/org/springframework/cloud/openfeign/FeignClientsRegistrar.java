@@ -59,6 +59,13 @@ import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
 /**
+ * 用于注册被 {@link FeignClient} 注解修饰的接口到容器中
+ * <p>
+ * 继承 ImportBeanDefinitionRegistrar 接口：向 Spring 容器中注入 Bean。
+ * 继承 ResourceLoaderAware 接口：加载外部资源。
+ * 继承 EnvironmentAware 接口：获取配置文件属性。
+ *
+ *
  * @author Spencer Gibb
  * @author Jakub Narloch
  * @author Venil Noronha
@@ -73,8 +80,10 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 	// patterned after Spring Integration IntegrationComponentScanRegistrar
 	// and RibbonClientsConfigurationRegistgrar
 
+	// 资源加载器
 	private ResourceLoader resourceLoader;
 
+	// 配置文件属性
 	private Environment environment;
 
 	FeignClientsRegistrar() {
@@ -145,12 +154,23 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 		this.resourceLoader = resourceLoader;
 	}
 
+	/**
+	 * 注册 FeignClient 的入口，
+	 * 继承自 ImportBeanDefinitionRegistrar，启动时会自动执行其 registerBeanDefinitions() 方法。
+	 */
 	@Override
 	public void registerBeanDefinitions(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
+		// 1. 注入 @EnableFeignClients 注解中指定的属性
+		// defaultConfiguration 作为所有 FeignClient 的兜底默认属性，可以被 @FeignClient 的 configuration 属性覆盖
+		// 暂且不关注这里
 		registerDefaultConfiguration(metadata, registry);
+		// 2. 注入 FeignClient
 		registerFeignClients(metadata, registry);
 	}
 
+	/**
+	 * 注入{@link EnableFeignClients} 注解中指定的 defaultConfiguration 属性
+	 */
 	private void registerDefaultConfiguration(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
 		Map<String, Object> defaultAttrs = metadata.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
 
@@ -162,63 +182,93 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 			else {
 				name = "default." + metadata.getClassName();
 			}
+			// 注入 FeignClient 的默认属性 FeignClientSpecification 到容器
 			registerClientConfiguration(registry, name, defaultAttrs.get("defaultConfiguration"));
 		}
 	}
 
+	/**
+	 * 扫描所有 FeignClient 并注入
+	 */
 	public void registerFeignClients(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
 
 		LinkedHashSet<BeanDefinition> candidateComponents = new LinkedHashSet<>();
+		// 1. 获取 @EnableFeignClients 注解中指定的元数据
 		Map<String, Object> attrs = metadata.getAnnotationAttributes(EnableFeignClients.class.getName());
 		final Class<?>[] clients = attrs == null ? null : (Class<?>[]) attrs.get("clients");
+
+		// 2. 没有指定 clients 属性，扫描注解中 basePackages 属性指定的包，找到包下所有被 @FeignClient 注解修饰的接口
 		if (clients == null || clients.length == 0) {
+			// 创建扫描器
 			ClassPathScanningCandidateComponentProvider scanner = getScanner();
 			scanner.setResourceLoader(this.resourceLoader);
 			scanner.addIncludeFilter(new AnnotationTypeFilter(FeignClient.class));
+			// 获取注解中指定的扫描路径
 			Set<String> basePackages = getBasePackages(metadata);
+			// 遍历路径进行扫描，将扫描到的被 @FeignClient 注解修饰的接口加入 candidateComponents
 			for (String basePackage : basePackages) {
 				candidateComponents.addAll(scanner.findCandidateComponents(basePackage));
 			}
 		}
+
+		// 3. 指定了 clients 属性，不走包扫描，注入注解中指定的 FeignClient
 		else {
 			for (Class<?> clazz : clients) {
 				candidateComponents.add(new AnnotatedGenericBeanDefinition(clazz));
 			}
 		}
 
+		// 4. 为所有被 @FeignClient 注解修饰的接口生成对应代理类，并将接口对应代理类注入容器
 		for (BeanDefinition candidateComponent : candidateComponents) {
 			if (candidateComponent instanceof AnnotatedBeanDefinition) {
-				// verify annotated class is an interface
+				// 校验：注解必须加在接口上
 				AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
 				AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
 				Assert.isTrue(annotationMetadata.isInterface(), "@FeignClient can only be specified on an interface");
 
-				Map<String, Object> attributes = annotationMetadata
-						.getAnnotationAttributes(FeignClient.class.getCanonicalName());
+				// @FeignClient 注解中指定的属性集合
+				Map<String, Object> attributes = annotationMetadata.getAnnotationAttributes(FeignClient.class.getCanonicalName());
 
+				// 获取注解中指定的服务名称标识(name/value/serviceId/contextId等)
 				String name = getClientName(attributes);
+				// 将 @FeignClient 注解中指定的配置类注入到容器，方便后续使用
 				registerClientConfiguration(registry, name, attributes.get("configuration"));
 
+				// 注入 @FeignClient 注解修饰的接口
 				registerFeignClient(registry, annotationMetadata, attributes);
 			}
 		}
 	}
 
-	private void registerFeignClient(BeanDefinitionRegistry registry, AnnotationMetadata annotationMetadata,
-			Map<String, Object> attributes) {
+	/**
+	 * 注入 @FeignClient 注解修饰的接口
+	 */
+	private void registerFeignClient(BeanDefinitionRegistry registry, AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
+
+		// 1. 根据 @FeignClient 注解的元数据获取一系列属性，用于后续创建接口代理类
+		// 接口全限定类名
 		String className = annotationMetadata.getClassName();
+		// 接口的 Class 对象
 		Class clazz = ClassUtils.resolveClassName(className, null);
-		ConfigurableBeanFactory beanFactory = registry instanceof ConfigurableBeanFactory
-				? (ConfigurableBeanFactory) registry : null;
+		// 根据 registry 获取 beanFactory
+		ConfigurableBeanFactory beanFactory = registry instanceof ConfigurableBeanFactory ? (ConfigurableBeanFactory) registry : null;
+
 		String contextId = getContextId(beanFactory, attributes);
 		String name = getName(attributes);
+
+		// 2. 创建 FeignClientFactoryBean 代理工厂，并填充上述属性，用于生成接口的代理类
 		FeignClientFactoryBean factoryBean = new FeignClientFactoryBean();
 		factoryBean.setBeanFactory(beanFactory);
 		factoryBean.setName(name);
 		factoryBean.setContextId(contextId);
 		factoryBean.setType(clazz);
 		factoryBean.setRefreshableClient(isClientRefreshEnabled());
-		BeanDefinitionBuilder definition = BeanDefinitionBuilder.genericBeanDefinition(clazz, () -> {
+
+		// 3. 创建 definitionBuilder，用于生成接口的 BeanDefinition。在注入比较复杂的对象时经常用这种方式来做
+		// 使用 BeanDefinitionBuilder 来构造，可以指定实例化对象的方法，后面传入的 lambda 函数就是
+		// 这里使用 factoryBean.getObject() 方法来生成接口的代理对象
+		BeanDefinitionBuilder definitionBuilder = BeanDefinitionBuilder.genericBeanDefinition(clazz, () -> {
+			// 完善 factoryBean 的属性，如 url、path、fallback、fallbackFactory
 			factoryBean.setUrl(getUrl(beanFactory, attributes));
 			factoryBean.setPath(getPath(beanFactory, attributes));
 			factoryBean.setDecode404(Boolean.parseBoolean(String.valueOf(attributes.get("decode404"))));
@@ -232,19 +282,21 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 				factoryBean.setFallbackFactory(fallbackFactory instanceof Class ? (Class<?>) fallbackFactory
 						: ClassUtils.resolveClassName(fallbackFactory.toString(), null));
 			}
+			// 最终生成接口代理对象的方法，实际是通过 factoryBean 生成接口的代理对象
 			return factoryBean.getObject();
 		});
-		definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
-		definition.setLazyInit(true);
+		definitionBuilder.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
+		definitionBuilder.setLazyInit(true);
 		validate(attributes);
 
-		AbstractBeanDefinition beanDefinition = definition.getBeanDefinition();
+		// 4. 根据 definitionBuilder 创建 BeanDefinition
+		// 这里的 BeanDefinition 中持有了代理对象的生成方法即上面的 lambda 函数
+		AbstractBeanDefinition beanDefinition = definitionBuilder.getBeanDefinition();
 		beanDefinition.setAttribute(FactoryBean.OBJECT_TYPE_ATTRIBUTE, className);
 		beanDefinition.setAttribute("feignClientsRegistrarFactoryBean", factoryBean);
 
 		// has a default, won't be null
 		boolean primary = (Boolean) attributes.get("primary");
-
 		beanDefinition.setPrimary(primary);
 
 		String[] qualifiers = getQualifiers(attributes);
@@ -252,9 +304,12 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 			qualifiers = new String[] { contextId + "FeignClient" };
 		}
 
+		// 5. 注册 beanDefinition 到容器，到这里接口的代理对象就注入到容器了，业务中就可以通过注解进行依赖注入了
+		// holder 主要作用是将 beanDefinition 和它的别名都封装进去，在将 beanDefinition 注入容器的时候还会为beanName关联别名
 		BeanDefinitionHolder holder = new BeanDefinitionHolder(beanDefinition, className, qualifiers);
 		BeanDefinitionReaderUtils.registerBeanDefinition(holder, registry);
 
+		// 如果配置了Feign可刷新，还有些额外操作，暂不关注
 		registerOptionsBeanDefinition(registry, contextId);
 	}
 
