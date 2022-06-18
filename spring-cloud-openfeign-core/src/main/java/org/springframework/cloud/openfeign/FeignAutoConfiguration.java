@@ -80,6 +80,8 @@ import org.springframework.security.oauth2.client.resource.OAuth2ProtectedResour
 import static org.springframework.cloud.openfeign.security.OAuth2FeignRequestInterceptorBuilder.buildWithConfigurers;
 
 /**
+ * OpenFeign 自动配置，注入一些 Bean，方便封装成 starter 开箱即用
+ *
  * @author Spencer Gibb
  * @author Julien Roy
  * @author Grzegorz Poznachowski
@@ -108,6 +110,9 @@ public class FeignAutoConfiguration {
 		return HasFeatures.namedFeature("Feign", Feign.class);
 	}
 
+	/**
+	 * 这里注入了 FeignContext，主要用在 {@link FeignClientFactoryBean} 中
+	 */
 	@Bean
 	public FeignContext feignContext() {
 		FeignContext context = new FeignContext();
@@ -141,6 +146,9 @@ public class FeignAutoConfiguration {
 
 	}
 
+	/**
+	 * 配置禁用熔断器，将 Targeter 设置为 DefaultTargeter
+	 */
 	@Configuration(proxyBeanMethods = false)
 	@Conditional(FeignCircuitBreakerDisabledConditions.class)
 	protected static class DefaultFeignTargeterConfiguration {
@@ -153,11 +161,17 @@ public class FeignAutoConfiguration {
 
 	}
 
+	/**
+	 * 配置开启熔断
+	 */
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass(CircuitBreaker.class)
 	@ConditionalOnProperty(value = "feign.circuitbreaker.enabled", havingValue = "true")
 	protected static class CircuitBreakerPresentFeignTargeterConfiguration {
 
+		/**
+		 * 开启熔断，缺少 CircuitBreakerFactory 时的降级逻辑，Targeter 设置为 DefaultTargeter
+		 */
 		@Bean
 		@ConditionalOnMissingBean(CircuitBreakerFactory.class)
 		public Targeter defaultFeignTargeter() {
@@ -179,6 +193,9 @@ public class FeignAutoConfiguration {
 			return new AlphanumericCircuitBreakerNameResolver();
 		}
 
+		/**
+		 *  开启熔断器，CircuitBreakerFactory 存在，根据 CircuitBreakerFactory 熔断工厂决定创建何种熔断器
+		 */
 		@Bean
 		@ConditionalOnMissingBean
 		@ConditionalOnBean(CircuitBreakerFactory.class)

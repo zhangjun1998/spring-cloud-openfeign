@@ -20,10 +20,21 @@ import feign.Feign;
 import feign.Target;
 
 /**
+ * 主要就是来控制创建何种 feignClient，是默认还是需要支持熔断，面向接口编程，不同子类有自己的具体实现。
+ *
  * @author Spencer Gibb
  */
 public interface Targeter {
 
+	/**
+	 * 用来生成 接口的代理对象(feignClient)
+	 *
+	 * @param factory  factoryBean，创建 feignClient 的工厂
+	 * @param feign  feignBuilder，创建 feignClient 所需要的一些类/属性/资源都被封装在里面
+	 * @param context  feignContext，feign 的上下文，每个 feignClient 有自己独立的 feignContext，单独隔离开
+	 * @param target target，封装了 url/path/name 等 HTTP 请求需要的参数，还能够将 RequestTemplate 转换为 Request
+	 * @return 接口的代理对象(feignClient)
+	 */
 	<T> T target(FeignClientFactoryBean factory, Feign.Builder feign, FeignContext context,
 			Target.HardCodedTarget<T> target);
 

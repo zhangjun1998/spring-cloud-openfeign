@@ -20,6 +20,8 @@ import feign.Feign;
 import feign.Target;
 
 /**
+ * 默认实现，啥也不干，直接调用 feignBuilder.target() 方法生成接口代理对象
+ *
  * @author Spencer Gibb
  */
 class DefaultTargeter implements Targeter {

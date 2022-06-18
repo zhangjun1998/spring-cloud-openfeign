@@ -282,7 +282,7 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 				factoryBean.setFallbackFactory(fallbackFactory instanceof Class ? (Class<?>) fallbackFactory
 						: ClassUtils.resolveClassName(fallbackFactory.toString(), null));
 			}
-			// 最终生成接口代理对象的方法，实际是通过 factoryBean 生成接口的代理对象
+			// 最终生成接口代理对象的方法，实际是通过 factoryBean 生成接口的代理对象(即 feignClient)
 			return factoryBean.getObject();
 		});
 		definitionBuilder.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
