@@ -57,7 +57,8 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
- * {@link FeignClient}注解 修饰接口的代理工厂，使用该工厂生成 {@link FeignClient}注解所修饰接口的代理对象
+ * {@link FeignClient}注解 修饰接口的代理工厂，使用该工厂生成 {@link FeignClient}注解所修饰接口的代理对象。
+ * 继承了 FactoryBean、InitializingBean、ApplicationContextAware、BeanFactoryAware 接口，帮助实现接口注入逻辑
  * <p>
  *
  * @author Spencer Gibb
@@ -74,8 +75,7 @@ import org.springframework.util.StringUtils;
  * @author Hyeonmin Park
  * @author Felix Dittrich
  */
-public class FeignClientFactoryBean
-		implements FactoryBean<Object>, InitializingBean, ApplicationContextAware, BeanFactoryAware {
+public class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, ApplicationContextAware, BeanFactoryAware {
 
 	/***********************************
 	 * WARNING! Nothing in this class should be @Autowired. It causes NPEs because of some
@@ -83,6 +83,8 @@ public class FeignClientFactoryBean
 	 ***********************************/
 
 	private static Log LOG = LogFactory.getLog(FeignClientFactoryBean.class);
+
+	// =================== 以下为 @FeignClient 注解中指定的属性 ====================
 
 	private Class<?> type;
 
@@ -96,15 +98,21 @@ public class FeignClientFactoryBean
 
 	private boolean decode404;
 
+	// =========================== 以下为 Spring 的相关属性 ============================
+
 	private boolean inheritParentContext = true;
 
 	private ApplicationContext applicationContext;
 
 	private BeanFactory beanFactory;
 
+	// ======================= 默认降级方案，可以被注解中指定的配置覆盖 ====================
+
 	private Class<?> fallback = void.class;
 
 	private Class<?> fallbackFactory = void.class;
+
+	// ====================== Request.Options() 中指定的属性 ==========================
 
 	private int readTimeoutMillis = new Request.Options().readTimeoutMillis();
 
@@ -116,25 +124,34 @@ public class FeignClientFactoryBean
 
 	private final List<FeignBuilderCustomizer> additionalCustomizers = new ArrayList<>();
 
+	/**
+	 * 在完成配置注入后做一些校验工作
+	 */
 	@Override
 	public void afterPropertiesSet() {
 		Assert.hasText(contextId, "Context id must be set");
 		Assert.hasText(name, "Name must be set");
 	}
 
+	/**
+	 * 构建 feignBuilder，主要就是将一些配置和属性填充到 feignBuilder，方便后续创建 feignClient(接口代理对象)
+	 */
 	protected Feign.Builder feign(FeignContext context) {
 		FeignLoggerFactory loggerFactory = get(context, FeignLoggerFactory.class);
 		Logger logger = loggerFactory.create(type);
 
 		// @formatter:off
+
+		// 从该 feignClient 对应的 FeignContext 中获取 feignBuilder
 		Feign.Builder builder = get(context, Feign.Builder.class)
-				// required values
-				.logger(logger)
-				.encoder(get(context, Encoder.class))
-				.decoder(get(context, Decoder.class))
-				.contract(get(context, Contract.class));
+				// 从 FeignContext 中获取该 feignClient 专属的各个资源并填充到 feignBuilder
+				.logger(logger) // 日志
+				.encoder(get(context, Encoder.class)) // 填充 Http 请求编码器
+				.decoder(get(context, Decoder.class)) // 填充 Http 响应解码器
+				.contract(get(context, Contract.class)); // 填充 SpringMVC 注解适配器
 		// @formatter:on
 
+		// 将配置文件中的各种属性填充到 feignBuilder
 		configureFeign(context, builder);
 
 		return builder;
@@ -373,12 +390,22 @@ public class FeignClientFactoryBean
 		}
 	}
 
+	/**
+	 * 创建一个支持负载均衡的接口代理对象
+	 */
 	protected <T> T loadBalance(Feign.Builder builder, FeignContext context, HardCodedTarget<T> target) {
+		// 从 FeignContext 中获取 Client，Client 可以是 HttpURLConnection、OkHTTP 等任意 HTTP 客户端，默认是 HttpURLConnection
 		Client client = getOptional(context, Client.class);
+		// 将 client 填充到 feignBuilder 中
 		if (client != null) {
+			// 将 client 填充到 feignBuilder 中
 			builder.client(client);
+			// 执行自定义配置修改 feignBuilder
 			applyBuildCustomizers(context, builder);
+			// 从 FeignContext 中获取 Targeter，在 FeignAutoConfiguration 中会自动根据配置决定注入何种 Targeter
+			// Targeter 的实现类有 DefaultTargeter 和 FeignCircuitBreakerTargeter，前者是默认的不支持熔断，后者支持熔断
 			Targeter targeter = get(context, Targeter.class);
+			// 使用 targeter 创建代理对象
 			return targeter.target(this, builder, context, target);
 		}
 
@@ -400,26 +427,34 @@ public class FeignClientFactoryBean
 		return null;
 	}
 
+	/**
+	 * 逻辑入口，生成 {@link FeignClient} 注解修饰接口的代理对象
+	 */
 	@Override
 	public Object getObject() {
 		return getTarget();
 	}
 
 	/**
+	 * 获取 {@link FeignClient} 注解所修饰接口的代理对象
+	 * <p>
+	 *
 	 * @param <T> the target type of the Feign client
 	 * @return a {@link Feign} client created with the specified data and the context
 	 * information
 	 */
 	<T> T getTarget() {
-		FeignContext context = beanFactory != null ? beanFactory.getBean(FeignContext.class)
-				: applicationContext.getBean(FeignContext.class);
+		// 1. 构造 feignBuilder
+		FeignContext context = beanFactory != null ? beanFactory.getBean(FeignContext.class) : applicationContext.getBean(FeignContext.class);
 		Feign.Builder builder = feign(context);
 
+		// 2. 没有指定 url，根据 @FeignClient 注解中指定的服务标识拼接出 url，后续会从注册中心获取该服务的地址
 		if (!StringUtils.hasText(url)) {
-
 			if (LOG.isInfoEnabled()) {
 				LOG.info("For '" + name + "' URL not provided. Will try picking an instance via load-balancing.");
 			}
+
+			// 拼接并整理 url 格式
 			if (!name.startsWith("http")) {
 				url = "http://" + name;
 			}
@@ -427,8 +462,13 @@ public class FeignClientFactoryBean
 				url = name;
 			}
 			url += cleanPath();
+
+			// 创建一个支持负载均衡的接口代理对象
+			// 返回值会强转为 @FeignClient 注解修饰的接口类型
 			return (T) loadBalance(builder, context, new HardCodedTarget<>(type, name, url));
 		}
+
+		// 3. 硬编码指定了 url，那就走直连 url 的方式。直连 url 不会做负载均衡
 		if (StringUtils.hasText(url) && !url.startsWith("http")) {
 			url = "http://" + url;
 		}
@@ -475,6 +515,9 @@ public class FeignClientFactoryBean
 		return type;
 	}
 
+	/**
+	 * 以单例模式注入
+	 */
 	@Override
 	public boolean isSingleton() {
 		return true;
@@ -544,6 +587,9 @@ public class FeignClientFactoryBean
 		return applicationContext;
 	}
 
+	/**
+	 * 注入 applicationContext、beanFactory
+	 */
 	@Override
 	public void setApplicationContext(ApplicationContext context) throws BeansException {
 		applicationContext = context;
@@ -609,6 +655,9 @@ public class FeignClientFactoryBean
 				.append("refreshableClient=").append(refreshableClient).append("}").toString();
 	}
 
+	/**
+	 * 注入 beanFactory
+	 */
 	@Override
 	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
 		this.beanFactory = beanFactory;

@@ -24,6 +24,11 @@ import org.springframework.cloud.context.named.NamedContextFactory;
 import org.springframework.lang.Nullable;
 
 /**
+ * 用于创建和管理 FeignClient 所依赖的各种类的工厂类，简而言之就是用于在创建 FeignClient 的过程中提供所需的类实例/资源
+ * 每个 FeignClient 都有一个自己的 FeignContext，是隔离开的，保证资源的并发安全。
+ * FeignContext 的创建可以看下面的 getContext() 方法，不存在时会加锁自动创建。
+ * <p>
+ *
  * A factory that creates instances of feign classes. It creates a Spring
  * ApplicationContext per client name, and extracts the beans that it needs from there.
  *
