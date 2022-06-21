@@ -38,6 +38,7 @@ import feign.Request;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.cloud.openfeign.AnnotatedParameterProcessor;
 import org.springframework.cloud.openfeign.CollectionFormat;
 import org.springframework.cloud.openfeign.annotation.CookieValueParameterProcessor;
@@ -65,6 +66,8 @@ import org.springframework.http.MediaType;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 
 import static feign.Util.checkState;
@@ -73,6 +76,11 @@ import static org.springframework.cloud.openfeign.support.FeignUtils.addTemplate
 import static org.springframework.core.annotation.AnnotatedElementUtils.findMergedAnnotation;
 
 /**
+ * 这个类主要做的就是扩展 openfeign 的 Contract，来支持 Spring MVC 的注解。
+ * 通过解析 类、方法、参数 上的 MVC 注解，将 MVC 注解中携带的数据填充到 openfeign 的 MethodMetadata 中。
+ * 这里支持了 {@link RequestMapping} 系列的注解(包括其子类 {@link GetMapping} 等)。
+ * openfeign 本身也提供了 SpringContract，但是要额外引入 feign-spring4 的包。
+ *
  * @author Spencer Gibb
  * @author Abhijit Sarkar
  * @author Halvdan Hoem Grelland
@@ -173,6 +181,9 @@ public class SpringMvcContract extends Contract.BaseContract implements Resource
 		this.resourceLoader = resourceLoader;
 	}
 
+	/**
+	 * 处理类上的 MVC 注解，也没做啥处理，就是不允许在被 {@link FeignClient} 注解修饰的类上使用 {@link RequestMapping} 系列注解
+	 */
 	@Override
 	protected void processAnnotationOnClass(MethodMetadata data, Class<?> clz) {
 		RequestMapping classAnnotation = findMergedAnnotation(clz, RequestMapping.class);
@@ -193,20 +204,26 @@ public class SpringMvcContract extends Contract.BaseContract implements Resource
 		return super.parseAndValidateMetadata(targetType, method);
 	}
 
+	/**
+	 * 处理方法上的 MVC 注解，包括 {@link RequestMapping} 系列注解、{@link CollectionFormat} 注解，
+	 * 将注解中携带的信息填充到 openfeign 的 MethodMetadata 中
+	 */
 	@Override
 	protected void processAnnotationOnMethod(MethodMetadata data, Annotation methodAnnotation, Method method) {
+		// 处理 CollectionFormat 注解，这个注解用来指定 RequestLine 注解中使用什么分隔符分隔多个参数，一般使用 MVC 的 RequestMapping 注解就用不上了
 		if (CollectionFormat.class.isInstance(methodAnnotation)) {
 			CollectionFormat collectionFormat = findMergedAnnotation(method, CollectionFormat.class);
 			data.template().collectionFormat(collectionFormat.value());
 		}
 
-		if (!RequestMapping.class.isInstance(methodAnnotation)
-				&& !methodAnnotation.annotationType().isAnnotationPresent(RequestMapping.class)) {
+		// 不是 RequestMapping 系列的注解，不做处理(RequestMapping、GetMapping、PostMapping，后两个注解的父类是RequestMapping)
+		if (!RequestMapping.class.isInstance(methodAnnotation) && !methodAnnotation.annotationType().isAnnotationPresent(RequestMapping.class)) {
 			return;
 		}
 
+		// 获取注解信息
 		RequestMapping methodMapping = findMergedAnnotation(method, RequestMapping.class);
-		// HTTP Method
+		// 请求类型，获取注解上的 method 属性，没设置时默认 GET
 		RequestMethod[] methods = methodMapping.method();
 		if (methods.length == 0) {
 			methods = new RequestMethod[] { RequestMethod.GET };
@@ -214,7 +231,7 @@ public class SpringMvcContract extends Contract.BaseContract implements Resource
 		checkOne(method, methods, "method");
 		data.template().method(Request.HttpMethod.valueOf(methods[0].name()));
 
-		// path
+		// 请求路径，获取注解上的 value 属性
 		checkAtMostOne(method, methodMapping.value(), "value");
 		if (methodMapping.value().length > 0) {
 			String pathValue = emptyToNull(methodMapping.value()[0]);
@@ -231,13 +248,13 @@ public class SpringMvcContract extends Contract.BaseContract implements Resource
 			}
 		}
 
-		// produces
+		// 可接受的内容类型，告知服务器请求方自身可以接受的内容类型，本质就是设置 ACCEPT 请求头，获取注解上的 produces 属性
 		parseProduces(data, method, methodMapping);
 
-		// consumes
+		// 发送的内容类型，告知服务器请求方发送的内容类型，本质就是设置 CONTENT_TYPE 请求头，获取注解上的 consumes 属性
 		parseConsumes(data, method, methodMapping);
 
-		// headers
+		// 请求头，获取注解上的 headers 属性
 		parseHeaders(data, method, methodMapping);
 
 		data.indexToExpander(new LinkedHashMap<>());
@@ -265,18 +282,15 @@ public class SpringMvcContract extends Contract.BaseContract implements Resource
 	protected boolean processAnnotationsOnParameter(MethodMetadata data, Annotation[] annotations, int paramIndex) {
 		boolean isHttpAnnotation = false;
 
-		AnnotatedParameterProcessor.AnnotatedParameterContext context = new SimpleAnnotatedParameterContext(data,
-				paramIndex);
+		AnnotatedParameterProcessor.AnnotatedParameterContext context = new SimpleAnnotatedParameterContext(data, paramIndex);
 		Method method = processedMethods.get(data.configKey());
 		for (Annotation parameterAnnotation : annotations) {
-			AnnotatedParameterProcessor processor = annotatedArgumentProcessors
-					.get(parameterAnnotation.annotationType());
+			AnnotatedParameterProcessor processor = annotatedArgumentProcessors.get(parameterAnnotation.annotationType());
 			if (processor != null) {
 				Annotation processParameterAnnotation;
 				// synthesize, handling @AliasFor, while falling back to parameter name on
 				// missing String #value():
-				processParameterAnnotation = synthesizeWithMethodParameterNameAsFallbackValue(parameterAnnotation,
-						method, paramIndex);
+				processParameterAnnotation = synthesizeWithMethodParameterNameAsFallbackValue(parameterAnnotation, method, paramIndex);
 				isHttpAnnotation |= processor.processArgument(context, processParameterAnnotation, method);
 			}
 		}
