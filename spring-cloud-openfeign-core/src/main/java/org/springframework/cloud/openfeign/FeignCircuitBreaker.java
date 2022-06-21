@@ -24,6 +24,7 @@ import org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory;
 
 /**
  * 对 feignClient 提供熔断降级功能
+ * 它并不直接继承 {@link CircuitBreaker} 接口，而是通过内部继承 FeignBuilder 的方式将 CircuitBreakerFactory 注入到 builder，然后通过工厂创建熔断器
  * <p>
  *
  * Allows Feign interfaces to work with {@link CircuitBreaker}.
@@ -124,9 +125,11 @@ public final class FeignCircuitBreaker {
 			// invocationHandlerFactory() 方法传入一个 InvocationHandlerFactory，它是 openfeign 的一个函数式接口，只有一个 create() 方法用于创建 InvocationHandler。
 			// 这里传入的 lambda 函数就是它的 create() 方法实现，返回了一个 FeignCircuitBreakerInvocationHandler，其继承自 java.lang.reflect.InvocationHandler 接口，
 			// 它会接管代理对象的所有方法调用，进而实现对方法的增强，做熔断降级等操作。
+			// 这里将 circuitBreakerFactory 等熔断器相关配置都作为参数传到了 InvocationHandler 中，因此它在拦截代理对象的方法调用时可以做很多事。
 			super.invocationHandlerFactory((target, dispatch) -> new FeignCircuitBreakerInvocationHandler(
 					circuitBreakerFactory, feignClientName, target, dispatch, nullableFallbackFactory,
-					circuitBreakerGroupEnabled, circuitBreakerNameResolver)
+					circuitBreakerGroupEnabled, circuitBreakerNameResolver
+				)
 			);
 			// 调用 builder.build() 方法创建 Feign 对象(ReflectiveFeign)，这里要看 openfeign 的源码，去我的 GitHub 看吧
 			return super.build();

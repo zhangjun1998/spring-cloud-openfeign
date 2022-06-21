@@ -11,7 +11,8 @@
 **已看和待看的代码如下：**
 
 + [x] @EnableFeignClients：OpenFeign的启动注解
-+ [x] FeignAutoConfiguration：自动注入一些Bean/配置属性，方便封装成 starter 开箱即用
++ [x] FeignAutoConfiguration：自动注入一些Bean/配置属性，如 FeignContext、Client、Targeter，方便封装成 starter 开箱即用
++ [x] DefaultFeignLoadBalancerConfiguration：用来注入支持负载均衡的客户端
 + [x] FeignClientsRegistrar：注入被@FeignClient修饰的接口代理对象到容器中
 + [x] FeignContext：用于在创建 FeignClient 的过程中提供所需的类实例/资源
 + [x] FeignClientFactoryBean：用于创建 feignClient 的 factoryBen
@@ -21,6 +22,14 @@
 + [x] FeignCircuitBreaker：对熔断器配置的包装，包含了熔断器工厂等引用，可以基于此创建熔断器
   + [x] FeignCircuitBreaker.Builder：继承自 Feign.Builder 
 + [x] FeignCircuitBreakerInvocationHandler：生成的代理对象关联的 InvocationHandler，调用对象的任意方法都会被转发到该类进行处理
++ [x] Client：HTTP 客户端
+  + [x] FeignBlockingLoadBalancerClient：支持负载均衡的 HTTP 客户端封装，如 Ribbon，它会在执行请求时去注册中心拉取 serviceName 对应的ip:port
+  + [x] RetryableFeignBlockingLoadBalancerClient：支持可重试的负载均衡客户端封装，用来支持可重试的负载均衡
++ [x] Targeter：
+  + [x] FeignCircuitBreakerTargeter：和 FeignCircuitBreaker 配合，帮助构建熔断降级的客户端
++ [x] Contract：用来解析方法上的注解和一些其它值填充到方法的元数据中
+  + [x] SpringMvcContract：spring-cloud-openfeign 对 openfeign 中 Contract 接口的实现，用于适配 Spring MVC 注解，解析出MVC注解表示的数据
+  + [x] SpringContract：openfeign 自身提供的对 Spring 注解的适配，但是要引入 feign-spring4 包
 + [ ] Encoder 的实现：spring-cloud-openfeign 对 openfeign 中 Encoder 接口的实现，用于HTTP请求编码
   + [ ] SpringEncoder
   + [ ] SpringPojoFormEncoder
@@ -28,16 +37,14 @@
 + [ ] Decoder 的实现：spring-cloud-openfeign 对 openfeign 中 Decoder 接口的实现，用于HTTP响应解码
   + [ ] SpringDecoder
   + [ ] ResponseEntityDecoder
-+ [ ] Contract：spring-cloud-openfeign 对 openfeign 中 Contract 接口的实现，用于适配 Spring MVC 注解，解析出MVC注解表示的数据
-  + [ ] SpringMvcContract
 + [ ] ...
 + 
 
 **涉及到openfeign的部分代码如下：**
 + [x] Feign：Feign 对象的抽象定义，定义了创建 feignClient 对象相关的一些基本操作
   + [x] Feign.Builder：内部类，Feign 对象的构造器
-+ [ ] ReflectiveFeign：Feign 的子类，可以使用反射创建出接口的代理对象(feignClient)
-+ [ ] InvocationHandlerFactory：InvocationHandler 的工厂类，用于创建 InvocationHandler，对接口代理对象的方法调用进行拦截，以此实现方法增强
++ [x] ReflectiveFeign：Feign 的子类，可以使用反射创建出接口的代理对象(feignClient)
++ [x] InvocationHandlerFactory：InvocationHandler 的工厂类，用于创建 InvocationHandler，对接口代理对象的方法调用进行拦截，以此实现方法增强
 + [ ] ...
 
 **联系方式：**

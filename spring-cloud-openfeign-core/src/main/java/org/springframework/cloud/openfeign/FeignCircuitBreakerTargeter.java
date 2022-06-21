@@ -34,6 +34,9 @@ class FeignCircuitBreakerTargeter implements Targeter {
 
 	private final CircuitBreakerNameResolver circuitBreakerNameResolver;
 
+	/**
+	 * 构造器，自动配置中调用该构造器注入 Targeter Bean
+	 */
 	FeignCircuitBreakerTargeter(CircuitBreakerFactory circuitBreakerFactory, boolean circuitBreakerGroupEnabled,
 			CircuitBreakerNameResolver circuitBreakerNameResolver) {
 		this.circuitBreakerFactory = circuitBreakerFactory;
@@ -41,6 +44,9 @@ class FeignCircuitBreakerTargeter implements Targeter {
 		this.circuitBreakerNameResolver = circuitBreakerNameResolver;
 	}
 
+	/**
+	 * 创建接口的代理对象，会将熔断器相关配置填充到 builder，然后通过 builder 创建代理对象
+	 */
 	@Override
 	public <T> T target(FeignClientFactoryBean factory, Feign.Builder feign, FeignContext context,
 			Target.HardCodedTarget<T> target) {

@@ -58,7 +58,7 @@ import org.springframework.util.StringUtils;
 
 /**
  * {@link FeignClient}注解 修饰接口的代理工厂，使用该工厂生成 {@link FeignClient}注解所修饰接口的代理对象。
- * 继承了 FactoryBean、InitializingBean、ApplicationContextAware、BeanFactoryAware 接口，帮助实现接口注入逻辑
+ * 继承了 FactoryBean、InitializingBean、ApplicationContextAware、BeanFactoryAware 接口，帮助实现接口注入逻辑。
  * <p>
  *
  * @author Spencer Gibb
@@ -392,9 +392,11 @@ public class FeignClientFactoryBean implements FactoryBean<Object>, Initializing
 
 	/**
 	 * 创建一个支持负载均衡的接口代理对象
+	 * 这个方法很重要，负载均衡和熔断的实现入口都在这里面
 	 */
 	protected <T> T loadBalance(Feign.Builder builder, FeignContext context, HardCodedTarget<T> target) {
-		// 从 FeignContext 中获取 Client，Client 可以是 HttpURLConnection、OkHTTP 等任意 HTTP 客户端，默认是 HttpURLConnection
+		// 从 FeignContext 中获取 Client，Client 可以是 Ribbon、HttpURLConnection、OkHTTP 等任意 HTTP 客户端，默认是 HttpURLConnection
+		// 负载均衡的关键在这，如果引入了 ribbon 等负载均衡组件，那么注入的是 LoadBalancerFeignClient，那么这个 client 在执行请求时会去从注册中心拉取数据来将 serviceName 替换成 url
 		Client client = getOptional(context, Client.class);
 		// 将 client 填充到 feignBuilder 中
 		if (client != null) {
@@ -404,6 +406,7 @@ public class FeignClientFactoryBean implements FactoryBean<Object>, Initializing
 			applyBuildCustomizers(context, builder);
 			// 从 FeignContext 中获取 Targeter，在 FeignAutoConfiguration 中会自动根据配置决定注入何种 Targeter
 			// Targeter 的实现类有 DefaultTargeter 和 FeignCircuitBreakerTargeter，前者是默认的不支持熔断，后者支持熔断
+			// 熔断器的关键在这里，如果引入了 Hystrix 等熔断器组件，那么注入的是 FeignCircuitBreakerTargeter，
 			Targeter targeter = get(context, Targeter.class);
 			// 使用 targeter 创建代理对象
 			return targeter.target(this, builder, context, target);

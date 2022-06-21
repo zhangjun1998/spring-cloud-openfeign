@@ -111,7 +111,9 @@ public class FeignAutoConfiguration {
 	}
 
 	/**
-	 * 这里注入了 FeignContext，主要用在 {@link FeignClientFactoryBean} 中
+	 * 这里注入了 FeignContext，是每个 FeignClient 的装配上下文。
+	 * 就是把 {@link EnableFeignClients} 注解中的 defaultConfiguration 属性和 {@link FeignClient} 注解中的 configuration 填充注入进去，
+	 * 然后按照 FeignClient 单独隔离开，每个 FeignClient 都有自己的上下文来获取装配过程中的所需资源。
 	 */
 	@Bean
 	public FeignContext feignContext() {
@@ -146,8 +148,10 @@ public class FeignAutoConfiguration {
 
 	}
 
+	/* --------------------------------- Targeter注入开始 ------------------------------------ */
+
 	/**
-	 * 配置禁用熔断器，将 Targeter 设置为 DefaultTargeter
+	 * 配置了禁用熔断器，将 Targeter 设置为 DefaultTargeter
 	 */
 	@Configuration(proxyBeanMethods = false)
 	@Conditional(FeignCircuitBreakerDisabledConditions.class)
@@ -162,7 +166,7 @@ public class FeignAutoConfiguration {
 	}
 
 	/**
-	 * 配置开启熔断
+	 * 配置了开启熔断
 	 */
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass(CircuitBreaker.class)
@@ -225,7 +229,12 @@ public class FeignAutoConfiguration {
 		}
 
 	}
+	/* --------------------------------- Targeter注入结束 ------------------------------------ */
 
+
+	/* --------------------------------- Client注入开始 ------------------------------------ */
+
+	// ============= ApacheHttpClient ===========
 	// the following configuration is for alternate feign clients if
 	// SC loadbalancer is not on the class path.
 	// see corresponding configurations in FeignLoadBalancerAutoConfiguration
@@ -275,6 +284,7 @@ public class FeignAutoConfiguration {
 			return this.httpClient;
 		}
 
+		// 注入 ApacheHttpClient 作为 Client 的实现
 		@Bean
 		@ConditionalOnMissingBean(Client.class)
 		public Client feignClient(HttpClient httpClient) {
@@ -298,6 +308,7 @@ public class FeignAutoConfiguration {
 
 	}
 
+	// =============== OkHttpClient ============
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass(OkHttpClient.class)
 	@ConditionalOnMissingBean(okhttp3.OkHttpClient.class)
@@ -337,6 +348,7 @@ public class FeignAutoConfiguration {
 			}
 		}
 
+		// 注入 OkHttpClient 作为 Client 的实现
 		@Bean
 		@ConditionalOnMissingBean(Client.class)
 		public Client feignClient(okhttp3.OkHttpClient client) {
@@ -345,6 +357,7 @@ public class FeignAutoConfiguration {
 
 	}
 
+	// =============== ApacheHttp5Client ===============
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass(ApacheHttp5Client.class)
 	@ConditionalOnMissingBean(org.apache.hc.client5.http.impl.classic.CloseableHttpClient.class)
@@ -352,6 +365,7 @@ public class FeignAutoConfiguration {
 	@Import(org.springframework.cloud.openfeign.clientconfig.HttpClient5FeignConfiguration.class)
 	protected static class HttpClient5FeignConfiguration {
 
+		// 注入 ApacheHttp5Client 作为 Client 的实现
 		@Bean
 		@ConditionalOnMissingBean(Client.class)
 		public Client feignClient(org.apache.hc.client5.http.impl.classic.CloseableHttpClient httpClient5) {
@@ -359,6 +373,9 @@ public class FeignAutoConfiguration {
 		}
 
 	}
+	/* --------------------------------- Client注入结束 ------------------------------------ */
+
+
 
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass(OAuth2ClientContext.class)

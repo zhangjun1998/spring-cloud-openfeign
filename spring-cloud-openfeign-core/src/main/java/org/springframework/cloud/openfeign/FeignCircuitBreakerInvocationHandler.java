@@ -37,7 +37,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import static feign.Util.checkNotNull;
 
 /**
- * 对接口代理对象的方法调用做代理，实现熔断降级等自定义逻辑
+ * 对接口代理对象的方法调用做代理，以增强方法，实现熔断降级等自定义逻辑
  */
 class FeignCircuitBreakerInvocationHandler implements InvocationHandler {
 
@@ -99,13 +99,13 @@ class FeignCircuitBreakerInvocationHandler implements InvocationHandler {
 			return toString();
 		}
 
-		// 将需要调用的方法封装为 Supplier，内部会执行代理方法
+		// 将需要调用的方法封装为 Supplier，内部会执行 MethodHandler(方法处理器) 的逻辑
 		Supplier<Object> supplier = asSupplier(method, args);
 		// 使用 CircuitBreakerFactory 创建熔断器，可以使用不同的熔断器，只要符合 spring cloud 对 CircuitBreaker 的规范即可，
 		// 比如 spring cloud 对 Hystrix 就封装了 HystrixCircuitBreakerFactory
 		String circuitName = circuitBreakerNameResolver.resolveCircuitBreakerName(feignClientName, target, method);
-		CircuitBreaker circuitBreaker = circuitBreakerGroupEnabled ? factory.create(circuitName, feignClientName)
-				: factory.create(circuitName);
+		CircuitBreaker circuitBreaker = circuitBreakerGroupEnabled ? factory.create(circuitName, feignClientName) : factory.create(circuitName);
+
 		// 有降级逻辑
 		if (this.nullableFallbackFactory != null) {
 			// 封装降级逻辑为 Function
@@ -119,12 +119,12 @@ class FeignCircuitBreakerInvocationHandler implements InvocationHandler {
 				}
 				return null;
 			};
-			// 使用熔断器执行代理方法调用，调用失败就走降级逻辑
+			// 使用熔断器执行方法处理器，调用失败就走降级逻辑
 			// 熔断器内具体的逻辑需要根据熔断器的类型具体分析，这里就不深入了，感兴趣可以看 Hystrix 的实现，逻辑在 HystrixCircuitBreaker 类中
 			return circuitBreaker.run(supplier, fallbackFunction);
 		}
-		// 没有降级逻辑
-		// 使用熔断器执行代理方法调用，调用失败直接抛异常
+
+		// 没有降级逻辑，使用熔断器执行方法处理器，调用失败直接抛异常
 		return circuitBreaker.run(supplier);
 	}
 
@@ -142,14 +142,14 @@ class FeignCircuitBreakerInvocationHandler implements InvocationHandler {
 	}
 
 	/**
-	 * 将代理方法的调用逻辑封装为 Supplier，方便交给熔断器去调用
+	 * 将方法处理器的执行逻辑封装为 Supplier，方便交给熔断器去调用
 	 */
 	private Supplier<Object> asSupplier(final Method method, final Object[] args) {
 		final RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
 		return () -> {
 			try {
 				RequestContextHolder.setRequestAttributes(requestAttributes);
-				// 从 dispatch 中获取目标方法的代理方法，执行，返回
+				// 从 dispatch 中获取目标方法的方法处理器，执行 invoke() 方法，返回结果
 				return dispatch.get(method).invoke(args);
 			}
 			catch (RuntimeException throwable) {

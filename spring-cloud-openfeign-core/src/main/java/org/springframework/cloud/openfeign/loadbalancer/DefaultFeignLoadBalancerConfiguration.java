@@ -32,6 +32,9 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 /**
+ * 用于注入支持负载均衡的客户端
+ * <p>
+ *
  * Configuration instantiating a {@link LoadBalancerClient}-based {@link Client} object
  * that uses {@link Client.Default} under the hood.
  *
@@ -45,8 +48,7 @@ class DefaultFeignLoadBalancerConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	@Conditional(OnRetryNotEnabledCondition.class)
-	public Client feignClient(LoadBalancerClient loadBalancerClient,
-			LoadBalancerClientFactory loadBalancerClientFactory) {
+	public Client feignClient(LoadBalancerClient loadBalancerClient, LoadBalancerClientFactory loadBalancerClientFactory) {
 		return new FeignBlockingLoadBalancerClient(new Client.Default(null, null), loadBalancerClient,
 				loadBalancerClientFactory);
 	}

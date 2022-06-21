@@ -61,6 +61,10 @@ import org.springframework.util.StreamUtils;
 import static org.springframework.cloud.openfeign.loadbalancer.LoadBalancerUtils.buildRequestData;
 
 /**
+ * spring-cloud-openfeign 对 Client 的代理，用来支持可重试的负载均衡。
+ * 在 {@link DefaultFeignLoadBalancerConfiguration} 配置中注入。
+ * <p>
+ *
  * A {@link Client} implementation that provides Spring Retry support for requests
  * load-balanced with Spring Cloud LoadBalancer.
  *
